@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import json
+import shutil
 from sklearn.preprocessing import StandardScaler
 import os
 
@@ -48,7 +49,7 @@ class HandleData:
             accel_last_ts = accel_data[-1, 0]
             hr_last_ts = hr_data[-1, 0]
 
-            if hr_last_ts < 300 or accel_last_ts < 300:
+            if hr_last_ts < 330 or accel_last_ts < 330:
                 return False
             
             # Allow for some small drift/jitter (e.g. < 5 seconds)
@@ -115,11 +116,11 @@ class HandleData:
             return np.array([])
 
         predictions = model.predict(feature_df)
-        np.savetxt('predictions.out', predictions, fmt='%d')
+        # np.savetxt('predictions.out', predictions, fmt='%d')
 
         save_path = os.path.join(session_dir, 'outputs', 'predictions')
         os.makedirs(save_path, exist_ok=True)
-        np.save(os.path.join(save_path, '0721_predictions.npy'), predictions)
+        # np.save(os.path.join(save_path, '0721_predictions.npy'), predictions)
 
         return predictions
 
@@ -145,5 +146,26 @@ class HandleData:
                 print(f"Uploaded predictions to s3://{bucket_name}/{prediction_key}")
             except Exception as e:
                 print(f"Failed to upload predictions: {e}")
+        
+    @staticmethod
+    def delete_user_data_if_is_last(dir_path):
+        json_path = os.path.join(dir_path, 'is_last.json')
+
+        try:
+            with open(json_path, 'r') as f:
+                json_data = json.load(f)
+        except FileNotFoundError:
+            return
+
+        if not json_data.get('isLast'):
+            return
+
+        user_path = os.path.dirname(dir_path)
+        print(f"Deleting user data at {user_path} as this was the last session.")
+
+        try:
+            shutil.rmtree(user_path)
+        except FileNotFoundError:
+            print(f"User data already deleted at {user_path}.")
 
 

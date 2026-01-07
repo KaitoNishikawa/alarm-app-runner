@@ -1,3 +1,23 @@
+# check efs command: aws ecs execute-command --cluster smart-alarm-app-cluster --task 6aa2ef404c7146ca8b7bf22f94d610ef --container smart-alarm-app-runner --interactive --command "/bin/sh"
+# import os
+# import boto3
+# from dotenv import load_dotenv
+# load_dotenv()
+# access_key = os.getenv('AWS_ACCESS_KEY_ID')
+# secret_access_key = os.getenv('AWS_SECRET_ACCESS_KEY')
+
+# if not access_key or not secret_access_key:
+#     print("WARNING: AWS Credentials not found in environment variables!")
+# else:
+#     print("AWS Credentials found.")
+
+# s3 = boto3.client(
+#     "s3",
+#     aws_access_key_id = access_key,
+#     aws_secret_access_key = secret_access_key,
+# )
+
+
 import os
 import sys
 import json
@@ -5,7 +25,6 @@ import boto3
 import joblib
 import requests
 import numpy as np
-from dotenv import load_dotenv
 from flask import Flask, jsonify, request
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -15,17 +34,9 @@ sys.path.insert(0, docker_root)
 from endpoint_stuff.handle_data import HandleData
 from source.preprocessing.preprocessing_runner import PreprocessingRunner
 
-load_dotenv()
-access_key = os.getenv('AWS_ACCESS_KEY_ID')
-secret_access_key = os.getenv('AWS_SECRET_ACCESS_KEY')
-
 app = Flask(__name__)
 
-s3 = boto3.client(
-    "s3",
-    aws_access_key_id = access_key,
-    aws_secret_access_key = secret_access_key,
-)
+s3 = boto3.client("s3")
 bucket_name = 's3-smart-alarm-app'
 
 model_path = "saved_model/Random_Forest.joblib"
@@ -33,7 +44,7 @@ clf = joblib.load(model_path)
 
 @app.route('/hello')
 def hello_world():
-    return jsonify(message='Hello World')
+    return jsonify(message='Hello World (Runner)')
 
 @app.route('/s3-webhook', methods=['POST'], strict_slashes=False)
 def s3_webhook():
@@ -102,13 +113,14 @@ def s3_webhook():
                     print(f"Session {session_dir} is ready. Running preprocessing...")
                     PreprocessingRunner.run_preprocessing('0721', session_dir)
                     feature_df = HandleData.load_files_into_df(session_dir)
-                    feature_df.to_csv('test.csv')
+                    # feature_df.to_csv('test.csv')
                     predictions = HandleData.make_predictions(feature_df, clf, session_dir)
                     HandleData.upload_predictions_to_s3(predictions, bucket_name, object_key, s3)
+                    HandleData.delete_user_data_if_is_last(session_dir)
         
         return "Notification received", 200
 
     return "OK", 200
 
 if __name__ == '__main__':
-    app.run(port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000)
